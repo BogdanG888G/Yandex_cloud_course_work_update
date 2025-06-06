@@ -1,0 +1,108 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: parser_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: goods_db
+      POSTGRES_USER: goods_user
+      POSTGRES_PASSWORD: goods_password
+      LC_COLLATE: 'C.UTF-8'
+      LC_CTYPE: 'C.UTF-8'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goods_user -d goods_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  superset:
+    image: apache/superset:3.0.1
+    container_name: superset_parser
+    restart: unless-stopped
+    environment:
+      SUPERSET_ENV: production
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SQLALCHEMY_DATABASE_URI: postgresql://goods_user:goods_password@postgres:5432/goods_db
+      TALISMAN_ENABLED: "False"
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./superset_config.py:/app/pythonpath/superset_config.py
+      - superset_home:/app/superset_home
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /app/pythonpath
+        if [ ! -f "/app/pythonpath/.initialized" ]; then
+          superset db upgrade
+          superset fab create-admin \
+            --username admin \
+            --firstname Admin \
+            --lastname User \
+            --email admin@example.com \
+            --password admin || true
+          superset init
+          touch /app/pythonpath/.initialized
+        fi
+        exec gunicorn --bind 0.0.0.0:8088 -w 2 --timeout 300 'superset.app:create_app()'
+
+  parser_api:
+    build:
+      context: ./parser
+      dockerfile: Dockerfile-parser
+    container_name: parser_api
+    restart: unless-stopped
+    command: ["uvicorn", "parser_api:app", "--host", "0.0.0.0", "--port", "8050"]
+    ports:
+      - "8050:8050"
+    env_file:
+      - .env
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile-bot
+    container_name: telegram_bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./.env:/app/.env
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      parser_api:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  superset_home:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge

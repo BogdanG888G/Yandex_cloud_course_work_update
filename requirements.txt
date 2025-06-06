@@ -1,0 +1,9 @@
+fastapi==0.68.0
+uvicorn==0.15.0
+python-dotenv==1.0.0
+psycopg2-binary==2.9.9
+requests==2.31.0
+pandas==1.5.3  # Используем более старую стабильную версию
+retry==0.9.2
+openpyxl==3.1.2
+numpy==1.24.0
