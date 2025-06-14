@@ -69,7 +69,7 @@
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/your-repo/wb-parser-bot.git
+git clone https://github.com/BogdanG888G/Yandex_cloud_course_work_update.git
 cd wb-parser-bot
 ```
 
